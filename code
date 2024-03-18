@@ -1,0 +1,57 @@
+import concurrent.futures
+import threading
+
+class ConcessionStandEnhanced:
+    def __init__(self, name, menu):
+        self.name = name
+        self.menu = menu
+        self.sales = 0  # Total sales in Euros
+        self.lock = threading.Lock()  # Lock for thread-safe operations
+
+    def process_sale(self, item, budget):
+        with self.lock:  # Ensure thread-safe update to sales and queue
+            if item in self.menu and budget >= self.menu[item]:
+                price = self.menu[item]
+                self.sales += price
+                return price, f"Spectator bought {item} for {price} at {self.name}"
+            return 0, "Spectator couldn't afford the item or it wasn't available"
+
+def simulate_visitor(stand, budget, preference=None):
+    # Spectators have a preference but choose randomly if their preferred item isn't available
+    if preference and preference in stand.menu:
+        item = preference
+    else:
+        item = random.choice(list(stand.menu.keys()))
+    
+    spent, result = stand.process_sale(item, budget)
+    return result
+
+# Example setup
+stand1 = ConcessionStandEnhanced("Beer Stand", {"Beer": 4.5})
+stand2 = ConcessionStandEnhanced("Bratwurst Stand", {"Bratwurst": 3.0})
+stands = [stand1, stand2]
+
+# Simulate a game day with multiple visitors using a thread pool
+def simulate_game_day_threaded(stands, num_visitors):
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = []
+        for _ in range(num_visitors):
+            budget = random.uniform(5, 50)  # Random budget
+            preference = random.choice(["Beer", "Bratwurst", None])  # Random preference
+            chosen_stand = random.choice(stands)
+            futures.append(executor.submit(simulate_visitor, chosen_stand, budget, preference))
+        
+        for future in concurrent.futures.as_completed(futures):
+            results.append(future.result())
+    
+    return results
+
+# Simulating the game day
+results = simulate_game_day_threaded(stands, 100)  # Simulate 100 visitors
+
+# Output and summary
+for result in results[:5]:  # Print first 5 results
+    print(result)
+
+print(f"{stand1.name} Sales: {stand1.sales}, {stand2.name} Sales: {stand2.sales}")
