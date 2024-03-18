@@ -1,58 +1,104 @@
 import concurrent.futures
 import threading
 import random
+import time
+
+
+class Stadium:
+    def __init__(self, name, beer_price, bratwurst_price):
+        self.name = name
+        self.concession_stands = [
+            ConcessionStand("Beer Stand", {"Beer": beer_price}, self.name),
+            ConcessionStand("Bratwurst Stand", {"Bratwurst": bratwurst_price}, self.name)
+        ]
+        additional_stands = random.randint(1, 5)  # Random number of additional stands
+        for i in range(1, additional_stands + 1):
+            stand_name = f"Extra Stand {i}"
+            menu = {"Beer": beer_price,
+                    "Bratwurst": bratwurst_price}
+            self.concession_stands.append(ConcessionStand(stand_name, menu, self.name))
+
 
 class ConcessionStand:
-    def __init__(self, name, menu):
+    def __init__(self, name, menu, stadium_name):
         self.name = name
         self.menu = menu
-        self.sales = 0  # Total sales in Euros
-        self.lock = threading.Lock()  # Lock for thread-safe operations
+        self.stadium_name = stadium_name
+        self.sales = 0
+        self.lock = threading.Lock()
+        self.queue = []
 
-    def process_sale(self, item, budget):
-        with self.lock:  # Ensure thread-safe update to sales and queue
+    def process_sale(self, item, budget, spectator_id):
+        with self.lock:
+            processing_time = random.randint(1, 3)  # Random processing time between 1 and 3 seconds
+            self.queue.append(spectator_id)
+            print(f"Spectator ID {spectator_id} is ordering {item} at {self.name} in {self.stadium_name}")
+
             if item in self.menu and budget >= self.menu[item]:
                 price = self.menu[item]
                 self.sales += price
-                return price, f" bought {item} for {price} at {self.name}"
-            return 0, "Spectator couldn't afford the item or it wasn't available"
+                print(f"Spectator ID {spectator_id} got their {item} at {self.name} in {self.stadium_name}")
+                self.queue.remove(spectator_id)  # Remove spectator from the queue
+                time.sleep(processing_time)  # Simulate processing time
+                return price, f"Spectator ID {spectator_id} finished purchasing {item} at {self.name}"
+
+            # If the item isn't affordable or available
+            self.queue.remove(spectator_id)  # Ensure the spectator is removed from the queue even if no purchase is 
+            # made
+            return 0, f"Spectator ID {spectator_id} couldn't afford the item or it wasn't available at {self.name}"
+
 
 def simulate_visitor(stand, budget, preference, spectator_id):
-    # Spectators have a preference but choose randomly if their preferred item isn't available
     if preference and preference in stand.menu:
         item = preference
     else:
         item = random.choice(list(stand.menu.keys()))
 
-    spent, result = stand.process_sale(item, budget)
-    return f"Spectator ID {spectator_id}: " + result
+    spent, result = stand.process_sale(item, budget, spectator_id)
+    return result
 
-# Simulate a game day with multiple visitors using a thread pool
-def simulate_game_day_threaded(stands, num_visitors):
+
+stadium_data = [
+    ("arena_aufSchalke", 4.20, 2.90),
+    ("waldstadion", 4.30, 3.50),
+    ("rheinenergiestadion", 4.90, 4.10),
+    ("allianzArena", 4.40, 4.20),
+    ("stuttgartArena", 4.20, 3.60),
+    ("olympiastadion", 4.90, 4.10),
+    ("signal_idunaPark", 3.90, 2.80),
+    ("dusseldorf_arena", 4.20, 3.20),
+    ("volksparkstadion", 4.30, 3.50),
+    ("leipzig_stadium", 4.00, 3.00)
+]
+
+
+def simulate_game_day_threaded(stadium):
+    print(f"\nSimulating game day at {stadium.name}")
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         futures = []
-        for spectator_id in range(1, num_visitors + 1):  # Generate unique IDs for each spectator
-            budget = random.uniform(5, 50)  # Random budget
-            preference = random.choice(["Beer", "Bratwurst", None])  # Random preference
-            chosen_stand = random.choice(stands)
+        for spectator_id in range(1, 11):  # Adjusted to simulate 10 spectators for brevity
+            budget = random.uniform(3, 10)
+            preference = random.choice(["Beer", "Bratwurst", None])
+            chosen_stand = random.choice(stadium.concession_stands)
             futures.append(executor.submit(simulate_visitor, chosen_stand, budget, preference, spectator_id))
 
         for future in concurrent.futures.as_completed(futures):
             results.append(future.result())
 
-    return results
+    # Print a sample of the results
+    for result in random.sample(results, min(5, len(results))):  # Ensuring we don't exceed the list length
+        print(result)
 
-# Example setup
-stand1 = ConcessionStand("Beer Stand", {"Beer": 4.5})
-stand2 = ConcessionStand("Bratwurst Stand", {"Bratwurst": 3.0})
-stands = [stand1, stand2]
+    # Calculate and print total sales for Beer and Bratwurst across all stands
+    total_beer_sales = sum(stand.sales for stand in stadium.concession_stands if "Beer" in stand.menu)
+    total_bratwurst_sales = sum(stand.sales for stand in stadium.concession_stands if "Bratwurst" in stand.menu)
 
-# Simulating the game day
-results = simulate_game_day_threaded(stands, 100)  # Simulate 100 visitors
+    print(f"Total Beer Sales at {stadium.name}: {total_beer_sales}")
+    print(f"Total Bratwurst Sales at {stadium.name}: {total_bratwurst_sales}\n")
 
-# Output and summary
-for result in results[:10]:  # Print first 5 results
-    print(result)
 
-print(f"{stand1.name} Sales: {stand1.sales}, {stand2.name} Sales: {stand2.sales}")
+stadiums = [Stadium(name, beer_price, bratwurst_price) for name, beer_price, bratwurst_price in stadium_data]
+
+for stadium in stadiums:
+    simulate_game_day_threaded(stadium)
